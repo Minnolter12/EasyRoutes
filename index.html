@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EasyRoutes - Amrita Campus Navigation</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes dashMove {
+      to {
+        stroke-dashoffset: -40;
+      }
+    }
+    .animate-route {
+      stroke-dasharray: 10, 6;
+      animation: dashMove 1.4s linear infinite;
+    }
+    @keyframes pulsePin {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.18); }
+    }
+    .pulse-start {
+      animation: pulsePin 1.8s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .pulse-goal {
+      animation: pulsePin 1.8s ease-in-out 0.3s infinite;
+      transform-origin: center;
+    }
+    .node-hover:hover circle.base-circle {
+      transform: scale(1.22);
+      transition: transform 0.15s ease-out;
+    }
+    /* Hide scrollbars but keep scrollability */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased h-screen w-screen overflow-hidden flex flex-col md:flex-row select-none">
+
+  <!-- Floating Sidebar / Navigation Panel -->
+  <aside class="w-full md:w-96 lg:w-[420px] bg-white/95 backdrop-blur-md shadow-2xl z-20 flex flex-col h-auto md:h-full border-r border-slate-200">
+    <!-- Header -->
+    <div class="p-5 pb-4 border-b border-slate-100 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-sm">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-xl shadow-inner">
+            🗺️
+          </div>
+          <div>
+            <h1 class="text-xl font-bold tracking-tight leading-none">EasyRoutes</h1>
+            <p class="text-xs text-blue-100 mt-1 font-medium">Amrita Vishwa Vidyapeetham, Coimbatore</p>
+          </div>
+        </div>
+        <span class="text-[11px] font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">A* Powered</span>
+      </div>
+    </div>
+
+    <!-- Route Selector Controls -->
+    <div class="p-4 border-b border-slate-100 space-y-3 bg-white">
+      <div class="relative flex flex-col space-y-2">
+        <!-- Visual connection line between dots -->
+        <div class="absolute left-[19px] top-[26px] bottom-[26px] w-0.5 bg-dashed border-l-2 border-dashed border-slate-300 pointer-events-none"></div>
+
+        <!-- Start Node -->
+        <div class="relative flex items-center">
+          <div class="w-10 flex justify-center z-10">
+            <span class="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow ring-2 ring-emerald-200"></span>
+          </div>
+          <div class="flex-1">
+            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Starting Point</label>
+            <select id="startSelect" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+              <option value="" disabled selected>Select start landmark...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Swap Button -->
+        <div class="flex justify-end pr-3 py-0.5 -my-1 z-10">
+          <button id="swapBtn" title="Swap Start & Destination" class="p-1.5 rounded-full bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition shadow-sm border border-slate-200 hover:border-blue-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Destination Node -->
+        <div class="relative flex items-center">
+          <div class="w-10 flex justify-center z-10">
+            <span class="w-4 h-4 rounded-full bg-rose-500 border-2 border-white shadow ring-2 ring-rose-200"></span>
+          </div>
+          <div class="flex-1">
+            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Destination</label>
+            <select id="goalSelect" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+              <option value="" disabled selected>Select destination...</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Preset Buttons -->
+      <div class="pt-1">
+        <p class="text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Popular Routes</p>
+        <div class="flex flex-wrap gap-1.5">
+          <button class="preset-btn px-2.5 py-1 text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-md font-medium transition border border-slate-200" data-start="K" data-goal="C">
+            Gate → Library
+          </button>
+          <button class="preset-btn px-2.5 py-1 text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-md font-medium transition border border-slate-200" data-start="A" data-goal="E">
+            Vasishta → ASB
+          </button>
+          <button class="preset-btn px-2.5 py-1 text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-md font-medium transition border border-slate-200" data-start="E" data-goal="J">
+            ASB → Sopanam
+          </button>
+          <button class="preset-btn px-2.5 py-1 text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-md font-medium transition border border-slate-200" data-start="D" data-goal="I">
+            Gargi → AB1
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Route Results & Turn-by-Turn Panel -->
+    <div id="resultsPanel" class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4">
+      <div id="placeholderState" class="text-center py-10 px-4">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center text-2xl shadow-inner">
+          📍
+        </div>
+        <h3 class="font-semibold text-slate-700 text-base">Select Your Route</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-[240px] mx-auto leading-relaxed">
+          Choose a start and destination above or click directly on any landmark node on the map.
+        </p>
+      </div>
+
+      <!-- Active Route Card -->
+      <div id="routeDetails" class="hidden space-y-3">
+        <!-- Summary Banner -->
+        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="inline-flex items-center text-xs font-bold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full">
+              🚶 Recommended Walking Route
+            </span>
+            <span id="routeEfficiency" class="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+              ✓ Optimal
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="totalDistance" class="text-2xl font-black text-slate-900">0 m</span>
+            <span id="walkDuration" class="text-sm font-semibold text-slate-500">• ~0 mins</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">Calculated via A* with Euclidean heuristic</p>
+        </div>
+
+        <!-- Step by Step Directions -->
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Turn-by-turn Navigation</h4>
+          <div id="stepsList" class="space-y-2 border-l-2 border-blue-400 ml-3 pl-3">
+            <!-- Injected dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map Info Footer -->
+    <div class="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+      <span>Amrita Coimbatore Campus</span>
+      <span class="flex items-center gap-1 text-[11px] text-slate-400">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> 11 Locations
+      </span>
+    </div>
+  </aside>
+
+  <!-- Main Map Viewport -->
+  <main class="flex-1 relative bg-[#f1f3f4] overflow-hidden flex flex-col">
+    <!-- Map Canvas Toolbar (Top Overlay) -->
+    <div class="absolute top-4 right-4 z-10 flex items-center space-x-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-lg border border-slate-200">
+      <button id="toggleLabelsBtn" class="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition" title="Toggle Distance Badges">
+        Distances: <span class="font-bold text-blue-600">ON</span>
+      </button>
+      <div class="h-4 w-px bg-slate-200"></div>
+      <button id="zoomInBtn" class="w-7 h-7 flex items-center justify-center text-slate-700 hover:bg-slate-100 rounded-lg font-bold text-base transition" title="Zoom In">+</button>
+      <button id="zoomOutBtn" class="w-7 h-7 flex items-center justify-center text-slate-700 hover:bg-slate-100 rounded-lg font-bold text-base transition" title="Zoom Out">−</button>
+      <button id="resetViewBtn" class="w-7 h-7 flex items-center justify-center text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold transition" title="Reset View">⛶</button>
+    </div>
+
+    <!-- Map Legend (Bottom Right Overlay) -->
+    <div class="absolute bottom-4 right-4 z-10 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-md border border-slate-200 text-xs space-y-1.5">
+      <div class="font-bold text-slate-600 text-[11px] uppercase tracking-wider mb-1">Campus Legend</div>
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
+        <span class="text-slate-600">Student Hostels</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
+        <span class="text-slate-600">Academic Blocks</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+        <span class="text-slate-600">Dining & Facilities</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-emerald-600 inline-block"></span>
+        <span class="text-slate-600">Campus Entrance</span>
+      </div>
+      <div class="flex items-center space-x-2 pt-1 border-t border-slate-100">
+        <span class="w-4 h-1 bg-blue-600 rounded-full inline-block"></span>
+        <span class="text-slate-800 font-semibold">Active Shortest Route</span>
+      </div>
+    </div>
+
+    <!-- Interactive SVG Map -->
+    <div id="svgContainer" class="flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden relative">
+      <svg id="campusMap" class="w-full h-full transition-transform duration-75" viewBox="0 0 1250 820" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <!-- Google Maps Route Shadow Filter -->
+          <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#1a73e8" flood-opacity="0.45" />
+          </filter>
+          <filter id="pinShadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.25" />
+          </filter>
+          <!-- Subtle grid pattern for map background -->
+          <pattern id="campusGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.7" />
+          </pattern>
+        </defs>
+
+        <!-- Base Background -->
+        <rect width="100%" height="100%" fill="#f8fafc" />
+        <rect width="100%" height="100%" fill="url(#campusGrid)" />
+
+        <!-- Greenery and Lawn Areas for aesthetic campus feel -->
+        <g id="campusGreenery" opacity="0.6">
+          <path d="M 120 180 Q 250 140 380 200 T 520 220 L 460 380 L 220 360 Z" fill="#e8f5e9" stroke="#c8e6c9" stroke-width="1.5" />
+          <path d="M 520 450 Q 750 420 900 480 L 820 620 L 580 600 Z" fill="#e8f5e9" stroke="#c8e6c9" stroke-width="1.5" />
+          <path d="M 280 480 Q 420 460 520 540 L 440 640 L 240 600 Z" fill="#f1f8e9" stroke="#dcedc8" stroke-width="1.5" />
+        </g>
+
+        <!-- Dynamic Map Elements Group (handles zoom and pan transforms) -->
+        <g id="mapTransformGroup">
+          <!-- Road Network (Underlay roads) -->
+          <g id="roadCasings" stroke="#cbd5e1" stroke-linecap="round" stroke-linejoin="round"></g>
+          <g id="roadSurfaces" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round"></g>
+          
+          <!-- Distance Badges on Roads -->
+          <g id="roadBadges"></g>
+
+          <!-- Active A* Route Layer -->
+          <g id="routeGlowLayer"></g>
+          <g id="activeRouteLayer"></g>
+
+          <!-- Campus Landmark Nodes -->
+          <g id="nodesLayer"></g>
+        </g>
+      </svg>
+    </div>
+  </main>
+
+  <script>
+    // --- 1. DATA: CAMPUS NODES & GRAPH (from easyroutes.py) ---
+    const NODES = {
+      'A': { id: 'A', name: 'Vasishta Hostel', short: 'Vasishta', category: 'hostel', x: 0, y: 277, color: '#9333ea', icon: '🛏️' },
+      'B': { id: 'B', name: 'Academic Block 2 (AB2)', short: 'AB2', category: 'academic', x: 162, y: 504, color: '#2563eb', icon: '🏛️' },
+      'C': { id: 'C', name: 'Central Library', short: 'Library', category: 'facility', x: 345, y: 541, color: '#0284c7', icon: '📚' },
+      'D': { id: 'D', name: 'Gargi Bhavanam', short: 'Gargi', category: 'hostel', x: 410, y: 429, color: '#9333ea', icon: '🛏️' },
+      'E': { id: 'E', name: 'ASB / Canteen / Pandal', short: 'ASB & Canteen', category: 'dining', x: 634, y: 572, color: '#ea580c', icon: '☕' },
+      'F': { id: 'F', name: 'Kashyapa Hostel', short: 'Kashyapa', category: 'hostel', x: 994, y: 421, color: '#9333ea', icon: '🛏️' },
+      'G': { id: 'G', name: 'General Store / PE Building', short: 'Gen Store & PE', category: 'facility', x: 627, y: 295, color: '#0d9488', icon: '🛍️' },
+      'H': { id: 'H', name: 'Mythreyi Bhavanam', short: 'Mythreyi', category: 'hostel', x: 580, y: 157, color: '#9333ea', icon: '🛏️' },
+      'I': { id: 'I', name: 'Academic Block 1 (AB1)', short: 'AB1', category: 'academic', x: 748, y: 115, color: '#2563eb', icon: '🏛️' },
+      'J': { id: 'J', name: 'Sopanam Guest House', short: 'Sopanam', category: 'facility', x: 854, y: 151, color: '#0d9488', icon: '🏢' },
+      'K': { id: 'K', name: 'Campus Main Gate', short: 'Main Gate', category: 'gate', x: 454, y: 0, color: '#059669', icon: '⛩️' }
+    };
+
+    const GRAPH = {
+      'A': { 'B': 432 },
+      'B': { 'C': 92, 'D': 320, 'A': 432 },
+      'C': { 'B': 92, 'E': 287 },
+      'D': { 'K': 432, 'G': 319, 'B': 320 },
+      'E': { 'G': 278, 'F': 432, 'C': 287 },
+      'F': { 'J': 455, 'G': 420, 'E': 432 },
+      'G': { 'D': 319, 'J': 328, 'F': 420, 'E': 278 },
+      'H': { 'K': 269, 'I': 397 },
+      'I': { 'J': 215, 'H': 397 },
+      'J': { 'F': 455, 'G': 328, 'I': 215 },
+      'K': { 'D': 432, 'H': 269 }
+    };
+
+    // --- 2. COORDINATE TRANSFORMATION ---
+    // Cartesian X: 0 to 994, Y: 0 (South) to 572 (North)
+    // Map to SVG coordinates where Y increases downwards and North is Up
+    const SVG_ORIGIN_X = 110;
+    const SVG_ORIGIN_Y = 690;
+
+    function toSvg(x, y) {
+      return {
+        x: SVG_ORIGIN_X + x * 1.02,
+        y: SVG_ORIGIN_Y - y * 1.02
+      };
+    }
+
+    // --- 3. A* PATHFINDING ALGORITHM ---
+    function euclideanDistance(nodeA, nodeB) {
+      const p1 = NODES[nodeA];
+      const p2 = NODES[nodeB];
+      return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    function runAStar(startNode, goalNode) {
+      if (!startNode || !goalNode) return null;
+      if (startNode === goalNode) {
+        return { path: [startNode], distance: 0 };
+      }
+
+      const openSet = [{
+        node: startNode,
+        f: euclideanDistance(startNode, goalNode),
+        g: 0
+      }];
+      const cameFrom = {};
+      const gScores = { [startNode]: 0 };
+
+      while (openSet.length > 0) {
+        openSet.sort((a, b) => a.f - b.f);
+        const { node: current, g } = openSet.shift();
+
+        if (current === goalNode) {
+          const path = [];
+          let curr = goalNode;
+          while (curr !== undefined) {
+            path.unshift(curr);
+            curr = cameFrom[curr];
+          }
+          return { path, distance: g };
+        }
+
+        if (g > (gScores[current] ?? Infinity)) continue;
+
+        const neighbors = GRAPH[current] || {};
+        for (const [neighbor, roadDist] of Object.entries(neighbors)) {
+          const totalDist = g + roadDist;
+          if (totalDist < (gScores[neighbor] ?? Infinity)) {
+            gScores[neighbor] = totalDist;
+            cameFrom[neighbor] = current;
+            const h = euclideanDistance(neighbor, goalNode);
+            openSet.push({
+              node: neighbor,
+              f: totalDist + h,
+              g: totalDist
+            });
+          }
+        }
+      }
+      return null;
+    }
+
+    // --- 4. MAP RENDERING ---
+    let showBadges = true;
+    let selectedStart = null;
+    let selectedGoal = null;
+
+    // Pan & Zoom State
+    let zoomLevel = 1;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let startPoint = { x: 0, y: 0 };
+
+    const mapTransformGroup = document.getElementById('mapTransformGroup');
+    const roadCasingsGroup = document.getElementById('roadCasings');
+    const roadSurfacesGroup = document.getElementById('roadSurfaces');
+    const roadBadgesGroup = document.getElementById('roadBadges');
+    const activeRouteGroup = document.getElementById('activeRouteLayer');
+    const routeGlowGroup = document.getElementById('routeGlowLayer');
+    const nodesLayerGroup = document.getElementById('nodesLayer');
+
+    function applyTransform() {
+      mapTransformGroup.setAttribute('transform', `translate(${panX}, ${panY}) scale(${zoomLevel})`);
+    }
+
+    // Extract unique undirected edges
+    function getUniqueEdges() {
+      const edges = [];
+      const seen = new Set();
+      for (const [u, neighbors] of Object.entries(GRAPH)) {
+        for (const [v, dist] of Object.entries(neighbors)) {
+          const edgeKey = [u, v].sort().join('-');
+          if (!seen.has(edgeKey)) {
+            seen.add(edgeKey);
+            edges.push({ u, v, dist });
+          }
+        }
+      }
+      return edges;
+    }
+
+    const uniqueEdges = getUniqueEdges();
+
+    function renderStaticMap() {
+      // 1. Draw Road Network
+      uniqueEdges.forEach(({ u, v, dist }) => {
+        const p1 = toSvg(NODES[u].x, NODES[u].y);
+        const p2 = toSvg(NODES[v].x, NODES[v].y);
+
+        // Road Casing (Gray border)
+        const casing = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        casing.setAttribute('x1', p1.x);
+        casing.setAttribute('y1', p1.y);
+        casing.setAttribute('x2', p2.x);
+        casing.setAttribute('y2', p2.y);
+        casing.setAttribute('stroke-width', '14');
+        roadCasingsGroup.appendChild(casing);
+
+        // Road Surface (White inner line)
+        const surface = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        surface.setAttribute('x1', p1.x);
+        surface.setAttribute('y1', p1.y);
+        surface.setAttribute('x2', p2.x);
+        surface.setAttribute('y2', p2.y);
+        surface.setAttribute('stroke-width', '9');
+        roadSurfacesGroup.appendChild(surface);
+
+        // Road Distance Pill Badge
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+
+        const badgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        badgeGroup.setAttribute('class', 'distance-badge pointer-events-none transition-opacity duration-200');
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', midX - 22);
+        rect.setAttribute('y', midY - 10);
+        rect.setAttribute('width', '44');
+        rect.setAttribute('height', '20');
+        rect.setAttribute('rx', '10');
+        rect.setAttribute('fill', '#ffffff');
+        rect.setAttribute('stroke', '#cbd5e1');
+        rect.setAttribute('stroke-width', '1');
+        rect.setAttribute('filter', 'url(#pinShadow)');
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', midX);
+        text.setAttribute('y', midY + 3.5);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', '#64748b');
+        text.setAttribute('font-size', '10.5');
+        text.setAttribute('font-weight', '600');
+        text.textContent = `${dist}m`;
+
+        badgeGroup.appendChild(rect);
+        badgeGroup.appendChild(text);
+        roadBadgesGroup.appendChild(badgeGroup);
+      });
+
+      // 2. Draw Landmark Nodes
+      Object.values(NODES).forEach(node => {
+        const { x, y } = toSvg(node.x, node.y);
+        const nodeG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        nodeG.setAttribute('id', `node-elem-${node.id}`);
+        nodeG.setAttribute('class', 'node-hover cursor-pointer');
+        nodeG.setAttribute('data-id', node.id);
+
+        // Drop shadow circle
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('class', 'base-circle transition-all duration-200');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', '17');
+        circle.setAttribute('fill', '#ffffff');
+        circle.setAttribute('stroke', node.color);
+        circle.setAttribute('stroke-width', '4');
+        circle.setAttribute('filter', 'url(#pinShadow)');
+
+        // Node Key text (A, B, C...)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('cx', x);
+        text.setAttribute('cy', y + 5);
+        text.setAttribute('x', x);
+        text.setAttribute('y', y + 5);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', '#1e293b');
+        text.setAttribute('font-size', '12.5');
+        text.setAttribute('font-weight', '800');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.id;
+
+        // Landmark Title Pill (Label)
+        const labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        labelG.setAttribute('pointer-events', 'none');
+
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelText.setAttribute('x', x);
+        labelText.setAttribute('y', y + 34);
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('fill', '#0f172a');
+        labelText.setAttribute('font-size', '12');
+        labelText.setAttribute('font-weight', '700');
+        labelText.textContent = node.short;
+
+        const subText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        subText.setAttribute('x', x);
+        subText.setAttribute('y', y + 47);
+        subText.setAttribute('text-anchor', 'middle');
+        subText.setAttribute('fill', '#64748b');
+        subText.setAttribute('font-size', '10');
+        subText.setAttribute('font-weight', '500');
+        subText.textContent = node.name.length > 22 ? node.category.toUpperCase() : node.name;
+
+        labelG.appendChild(labelText);
+        labelG.appendChild(subText);
+
+        nodeG.appendChild(circle);
+        nodeG.appendChild(text);
+        nodeG.appendChild(labelG);
+
+        // Click Handler for Node
+        nodeG.addEventListener('click', () => handleNodeClick(node.id));
+
+        nodesLayerGroup.appendChild(nodeG);
+      });
+    }
+
+    // --- 5. INTERACTION & ROUTE UPDATE ---
+    function handleNodeClick(nodeId) {
+      if (!selectedStart || (selectedStart && selectedGoal)) {
+        selectedStart = nodeId;
+        selectedGoal = null;
+      } else if (selectedStart && !selectedGoal) {
+        if (selectedStart === nodeId) {
+          // Deselect if clicked same
+          selectedStart = null;
+        } else {
+          selectedGoal = nodeId;
+        }
+      }
+      syncInputs();
+      recalculateRoute();
+    }
+
+    function syncInputs() {
+      document.getElementById('startSelect').value = selectedStart || '';
+      document.getElementById('goalSelect').value = selectedGoal || '';
+    }
+
+    function recalculateRoute() {
+      // Clear previous active route graphics
+      activeRouteGroup.innerHTML = '';
+      routeGlowGroup.innerHTML = '';
+
+      // Reset node styles
+      Object.keys(NODES).forEach(id => {
+        const elem = document.getElementById(`node-elem-${id}`);
+        if (!elem) return;
+        const circle = elem.querySelector('circle.base-circle');
+        circle.setAttribute('fill', '#ffffff');
+        circle.setAttribute('stroke', NODES[id].color);
+        circle.setAttribute('stroke-width', '4');
+        circle.setAttribute('r', '17');
+        circle.classList.remove('pulse-start', 'pulse-goal');
+      });
+
+      const placeholder = document.getElementById('placeholderState');
+      const routeDetails = document.getElementById('routeDetails');
+
+      if (!selectedStart || !selectedGoal) {
+        placeholder.classList.remove('hidden');
+        routeDetails.classList.add('hidden');
+
+        // If only start is selected, highlight start node
+        if (selectedStart) {
+          const startElem = document.getElementById(`node-elem-${selectedStart}`);
+          if (startElem) {
+            const circle = startElem.querySelector('circle.base-circle');
+            circle.setAttribute('fill', '#10b981');
+            circle.setAttribute('stroke', '#ffffff');
+            circle.setAttribute('stroke-width', '4');
+            circle.setAttribute('r', '20');
+            circle.classList.add('pulse-start');
+          }
+        }
+        return;
+      }
+
+      // Compute A* route
+      const result = runAStar(selectedStart, selectedGoal);
+      if (!result) return;
+
+      placeholder.classList.add('hidden');
+      routeDetails.classList.remove('hidden');
+
+      const { path, distance } = result;
+
+      // Update Info Cards
+      document.getElementById('totalDistance').textContent = distance >= 1000 
+        ? `${(distance / 1000).toFixed(2)} km` 
+        : `${distance} meters`;
+
+      // Average walking speed ~ 1.3 m/s = 78 m/min
+      const walkingMins = Math.max(1, Math.round(distance / 78));
+      document.getElementById('walkDuration').textContent = `• ~${walkingMins} min walk`;
+
+      // Render Step Directions
+      const stepsList = document.getElementById('stepsList');
+      stepsList.innerHTML = '';
+
+      path.forEach((nodeId, idx) => {
+        const node = NODES[nodeId];
+        const stepDiv = document.createElement('div');
+        stepDiv.className = 'relative flex items-start space-x-2.5 text-xs';
+
+        let distInfo = '';
+        if (idx < path.length - 1) {
+          const nextNode = path[idx + 1];
+          const segmentDist = GRAPH[nodeId][nextNode];
+          distInfo = `<span class="text-blue-600 font-bold ml-auto">${segmentDist}m</span>`;
+        }
+
+        const isFirst = idx === 0;
+        const isLast = idx === path.length - 1;
+        const badgeColor = isFirst ? 'bg-emerald-500' : isLast ? 'bg-rose-500' : 'bg-blue-500';
+
+        stepDiv.innerHTML = `
+          <span class="w-3.5 h-3.5 rounded-full ${badgeColor} text-white font-bold flex items-center justify-center text-[9px] mt-0.5 shadow-sm">
+            ${isFirst ? 'S' : isLast ? 'G' : idx}
+          </span>
+          <div class="flex-1 flex items-center justify-between">
+            <div>
+              <p class="font-bold text-slate-800">${node.name}</p>
+              <p class="text-[11px] text-slate-400">${isFirst ? 'Starting point' : isLast ? 'Destination arrived' : `Continue towards ${NODES[path[idx+1]].short}`}</p>
+            </div>
+            ${distInfo}
+          </div>
+        `;
+        stepsList.appendChild(stepDiv);
+      });
+
+      // Draw SVG Polyline for Route
+      const points = path.map(id => {
+        const { x, y } = toSvg(NODES[id].x, NODES[id].y);
+        return `${x},${y}`;
+      }).join(' ');
+
+      // Glowing underlay
+      const glowPolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      glowPolyline.setAttribute('points', points);
+      glowPolyline.setAttribute('fill', 'none');
+      glowPolyline.setAttribute('stroke', '#1a73e8');
+      glowPolyline.setAttribute('stroke-width', '16');
+      glowPolyline.setAttribute('stroke-linecap', 'round');
+      glowPolyline.setAttribute('stroke-linejoin', 'round');
+      glowPolyline.setAttribute('opacity', '0.35');
+      glowPolyline.setAttribute('filter', 'url(#routeGlow)');
+      routeGlowGroup.appendChild(glowPolyline);
+
+      // Main active vibrant blue route
+      const activePolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      activePolyline.setAttribute('points', points);
+      activePolyline.setAttribute('fill', 'none');
+      activePolyline.setAttribute('stroke', '#1a73e8');
+      activePolyline.setAttribute('stroke-width', '7');
+      activePolyline.setAttribute('stroke-linecap', 'round');
+      activePolyline.setAttribute('stroke-linejoin', 'round');
+      activeRouteGroup.appendChild(activePolyline);
+
+      // Animated marching dash layer
+      const dashPolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      dashPolyline.setAttribute('class', 'animate-route');
+      dashPolyline.setAttribute('points', points);
+      dashPolyline.setAttribute('fill', 'none');
+      dashPolyline.setAttribute('stroke', '#ffffff');
+      dashPolyline.setAttribute('stroke-width', '3');
+      dashPolyline.setAttribute('stroke-linecap', 'round');
+      dashPolyline.setAttribute('stroke-linejoin', 'round');
+      activeRouteGroup.appendChild(dashPolyline);
+
+      // Highlight path nodes on map
+      path.forEach((id, idx) => {
+        const elem = document.getElementById(`node-elem-${id}`);
+        if (!elem) return;
+        const circle = elem.querySelector('circle.base-circle');
+        if (idx === 0) {
+          circle.setAttribute('fill', '#10b981');
+          circle.setAttribute('stroke', '#ffffff');
+          circle.setAttribute('stroke-width', '4');
+          circle.setAttribute('r', '21');
+          circle.classList.add('pulse-start');
+        } else if (idx === path.length - 1) {
+          circle.setAttribute('fill', '#f43f5e');
+          circle.setAttribute('stroke', '#ffffff');
+          circle.setAttribute('stroke-width', '4');
+          circle.setAttribute('r', '21');
+          circle.classList.add('pulse-goal');
+        } else {
+          circle.setAttribute('fill', '#1a73e8');
+          circle.setAttribute('stroke', '#ffffff');
+          circle.setAttribute('stroke-width', '3');
+          circle.setAttribute('r', '18');
+        }
+      });
+    }
+
+    // --- 6. INITIALIZE UI & EVENT LISTENERS ---
+    function init() {
+      const startSelect = document.getElementById('startSelect');
+      const goalSelect = document.getElementById('goalSelect');
+
+      // Populate dropdowns sorted by name
+      Object.values(NODES).forEach(node => {
+        const opt1 = document.createElement('option');
+        opt1.value = node.id;
+        opt1.textContent = `${node.id}: ${node.name}`;
+        startSelect.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = node.id;
+        opt2.textContent = `${node.id}: ${node.name}`;
+        goalSelect.appendChild(opt2);
+      });
+
+      startSelect.addEventListener('change', e => {
+        selectedStart = e.target.value;
+        recalculateRoute();
+      });
+
+      goalSelect.addEventListener('change', e => {
+        selectedGoal = e.target.value;
+        recalculateRoute();
+      });
+
+      document.getElementById('swapBtn').addEventListener('click', () => {
+        const temp = selectedStart;
+        selectedStart = selectedGoal;
+        selectedGoal = temp;
+        syncInputs();
+        recalculateRoute();
+      });
+
+      // Quick preset buttons
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedStart = btn.getAttribute('data-start');
+          selectedGoal = btn.getAttribute('data-goal');
+          syncInputs();
+          recalculateRoute();
+        });
+      });
+
+      // Toggle Distance Labels
+      const toggleBtn = document.getElementById('toggleLabelsBtn');
+      toggleBtn.addEventListener('click', () => {
+        showBadges = !showBadges;
+        roadBadgesGroup.style.opacity = showBadges ? '1' : '0';
+        toggleBtn.innerHTML = `Distances: <span class="font-bold text-${showBadges ? 'blue' : 'slate'}-600">${showBadges ? 'ON' : 'OFF'}</span>`;
+      });
+
+      // Zoom & Pan Handlers
+      const container = document.getElementById('svgContainer');
+
+      container.addEventListener('mousedown', e => {
+        if (e.target.closest('.node-hover')) return; // let node clicks pass
+        isPanning = true;
+        startPoint = { x: e.clientX - panX, y: e.clientY - panY };
+      });
+
+      window.addEventListener('mousemove', e => {
+        if (!isPanning) return;
+        panX = e.clientX - startPoint.x;
+        panY = e.clientY - startPoint.y;
+        applyTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPanning = false;
+      });
+
+      container.addEventListener('wheel', e => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        zoomLevel = Math.min(Math.max(0.6, zoomLevel * delta), 2.5);
+        applyTransform();
+      });
+
+      document.getElementById('zoomInBtn').addEventListener('click', () => {
+        zoomLevel = Math.min(2.5, zoomLevel * 1.2);
+        applyTransform();
+      });
+
+      document.getElementById('zoomOutBtn').addEventListener('click', () => {
+        zoomLevel = Math.max(0.6, zoomLevel / 1.2);
+        applyTransform();
+      });
+
+      document.getElementById('resetViewBtn').addEventListener('click', () => {
+        zoomLevel = 1;
+        panX = 0;
+        panY = 0;
+        applyTransform();
+      });
+
+      // Render initial map
+      renderStaticMap();
+
+      // Default demo route: Main Gate (K) -> Central Library (C)
+      selectedStart = 'K';
+      selectedGoal = 'C';
+      syncInputs();
+      recalculateRoute();
+    }
+
+    init();
+  </script>
+</body>
+</html>
