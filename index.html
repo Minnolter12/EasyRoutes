@@ -57,7 +57,10 @@
             <p class="text-xs text-blue-100 mt-1 font-medium">Amrita Vishwa Vidyapeetham, Coimbatore</p>
           </div>
         </div>
-        <span class="text-[11px] font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">A* Powered</span>
+        <div id="backendStatusBadge" class="text-[11px] font-semibold bg-white/20 text-white px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all" title="Connecting to easyroutes.py backend...">
+          <span id="backendStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="backendStatusText">Python Backend</span>
+        </div>
       </div>
     </div>
 
@@ -125,6 +128,7 @@
 
     <!-- Route Results & Turn-by-Turn Panel -->
     <div id="resultsPanel" class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4">
+      <!-- 1. Placeholder state (no route selected) -->
       <div id="placeholderState" class="text-center py-10 px-4">
         <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center text-2xl shadow-inner">
           📍
@@ -135,7 +139,39 @@
         </p>
       </div>
 
-      <!-- Active Route Card -->
+      <!-- 2. Loading state while Python backend executes easyRoute -->
+      <div id="routeLoadingState" class="hidden text-center py-10 px-4">
+        <div class="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+        <h4 class="font-semibold text-slate-800 text-sm">Computing Route via Python A*...</h4>
+        <p class="text-xs text-slate-400 mt-1">Executing <code class="text-blue-600 font-mono">easyRoute()</code> in <code class="text-blue-600 font-mono">easyroutes.py</code></p>
+      </div>
+
+      <!-- 3. Backend Offline / Error state -->
+      <div id="backendErrorState" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs space-y-3 shadow-sm">
+        <div class="flex items-center space-x-2 text-rose-800 font-bold text-sm">
+          <span>⚠️</span>
+          <span>Python Backend Offline</span>
+        </div>
+        <p id="backendErrorMessage" class="text-rose-700 leading-relaxed">
+          The frontend strictly requires the Python backend in <code class="font-semibold">easyroutes.py</code> to execute the A* pathfinding algorithm.
+        </p>
+        <div class="bg-white/90 border border-rose-200 rounded-lg p-3 text-slate-800 font-mono text-xs space-y-1.5 shadow-inner">
+          <div class="text-slate-500 font-sans text-[10px] uppercase font-bold tracking-wider">Start the backend in your terminal:</div>
+          <div class="bg-slate-900 text-emerald-400 px-2.5 py-1.5 rounded select-all font-mono text-[11px]">
+            python3 easyroutes.py
+          </div>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <p class="text-[11px] text-rose-600">
+            Then open <span class="font-semibold">http://localhost:8000</span>
+          </p>
+          <button id="retryBackendBtn" class="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-semibold text-xs transition shadow-sm">
+            Retry
+          </button>
+        </div>
+      </div>
+
+      <!-- 4. Active Route Card -->
       <div id="routeDetails" class="hidden space-y-3">
         <!-- Summary Banner -->
         <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 shadow-sm">
@@ -151,14 +187,20 @@
             <span id="totalDistance" class="text-2xl font-black text-slate-900">0 m</span>
             <span id="walkDuration" class="text-sm font-semibold text-slate-500">• ~0 mins</span>
           </div>
-          <p class="text-xs text-slate-500 mt-1">Calculated via A* with Euclidean heuristic</p>
+          <div class="flex items-center justify-between text-xs text-slate-500 mt-2 pt-2 border-t border-blue-100/60">
+            <span class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Backend: <code class="font-mono text-[11px] bg-white px-1.5 py-0.5 rounded border border-blue-200 text-blue-700 font-semibold">easyroutes.py (easyRoute)</code>
+            </span>
+            <span class="text-[11px] text-slate-400 font-medium">Euclidean Heuristic</span>
+          </div>
         </div>
 
         <!-- Step by Step Directions -->
         <div>
           <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Turn-by-turn Navigation</h4>
           <div id="stepsList" class="space-y-2 border-l-2 border-blue-400 ml-3 pl-3">
-            <!-- Injected dynamically -->
+            <!-- Injected dynamically from Python backend response -->
           </div>
         </div>
       </div>
@@ -260,7 +302,7 @@
   </main>
 
   <script>
-    // --- 1. DATA: CAMPUS NODES & GRAPH (from easyroutes.py) ---
+    // --- 1. DATA: CAMPUS NODES & GRAPH (matches easyroutes.py) ---
     const NODES = {
       'A': { id: 'A', name: 'Vasishta Hostel', short: 'Vasishta', category: 'hostel', x: 0, y: 277, color: '#9333ea', icon: '🛏️' },
       'B': { id: 'B', name: 'Academic Block 2 (AB2)', short: 'AB2', category: 'academic', x: 162, y: 504, color: '#2563eb', icon: '🏛️' },
@@ -302,59 +344,93 @@
       };
     }
 
-    // --- 3. A* PATHFINDING ALGORITHM ---
-    function euclideanDistance(nodeA, nodeB) {
-      const p1 = NODES[nodeA];
-      const p2 = NODES[nodeB];
-      return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    // --- 3. PYTHON BACKEND INTEGRATION (easyroutes.py) ---
+    // STRICT REQUIREMENT: No JavaScript A* algorithm!
+    // All shortest-path pathfinding is executed by easyRoute in easyroutes.py on the Python backend.
+    const BACKEND_URLS = [
+      '', // Relative origin (e.g. http://localhost:8000 when served via easyroutes.py)
+      'http://localhost:8000',
+      'http://127.0.0.1:8000'
+    ];
+
+    function updateBackendStatus(online, detail = '') {
+      const badge = document.getElementById('backendStatusBadge');
+      const dot = document.getElementById('backendStatusDot');
+      const text = document.getElementById('backendStatusText');
+
+      if (!badge || !dot || !text) return;
+
+      if (online) {
+        badge.className = 'text-[11px] font-semibold bg-emerald-500/25 text-emerald-100 border border-emerald-400/40 px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all shadow-sm';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-300 animate-pulse';
+        text.textContent = 'Python Backend Connected';
+        badge.title = 'Successfully connected to easyroutes.py backend!';
+      } else {
+        badge.className = 'text-[11px] font-semibold bg-rose-500/30 text-rose-100 border border-rose-400/50 px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all shadow-sm';
+        dot.className = 'w-2 h-2 rounded-full bg-rose-400';
+        text.textContent = 'Python Backend Offline';
+        badge.title = detail || 'Cannot connect to easyroutes.py backend. Run python3 easyroutes.py in your terminal.';
+      }
     }
 
-    function runAStar(startNode, goalNode) {
-      if (!startNode || !goalNode) return null;
-      if (startNode === goalNode) {
-        return { path: [startNode], distance: 0 };
-      }
-
-      const openSet = [{
-        node: startNode,
-        f: euclideanDistance(startNode, goalNode),
-        g: 0
-      }];
-      const cameFrom = {};
-      const gScores = { [startNode]: 0 };
-
-      while (openSet.length > 0) {
-        openSet.sort((a, b) => a.f - b.f);
-        const { node: current, g } = openSet.shift();
-
-        if (current === goalNode) {
-          const path = [];
-          let curr = goalNode;
-          while (curr !== undefined) {
-            path.unshift(curr);
-            curr = cameFrom[curr];
+    async function checkBackendHealth() {
+      for (const baseUrl of BACKEND_URLS) {
+        try {
+          const res = await fetch(`${baseUrl}/api/health`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.status === 'ok') {
+              updateBackendStatus(true);
+              return baseUrl;
+            }
           }
-          return { path, distance: g };
-        }
-
-        if (g > (gScores[current] ?? Infinity)) continue;
-
-        const neighbors = GRAPH[current] || {};
-        for (const [neighbor, roadDist] of Object.entries(neighbors)) {
-          const totalDist = g + roadDist;
-          if (totalDist < (gScores[neighbor] ?? Infinity)) {
-            gScores[neighbor] = totalDist;
-            cameFrom[neighbor] = current;
-            const h = euclideanDistance(neighbor, goalNode);
-            openSet.push({
-              node: neighbor,
-              f: totalDist + h,
-              g: totalDist
-            });
-          }
+        } catch (e) {
+          // Continue to next URL candidate
         }
       }
+      updateBackendStatus(false);
       return null;
+    }
+
+    async function fetchRouteFromBackend(startNode, goalNode) {
+      if (!startNode || !goalNode) return null;
+
+      let lastError = null;
+
+      for (const baseUrl of BACKEND_URLS) {
+        try {
+          const endpoint = `${baseUrl}/api/route?start=${encodeURIComponent(startNode)}&goal=${encodeURIComponent(goalNode)}`;
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status}: Failed to calculate route`);
+          }
+
+          const data = await response.json();
+          if (data && data.success) {
+            updateBackendStatus(true);
+            return {
+              path: data.path,
+              distance: data.distance,
+              segments: data.segments || []
+            };
+          } else {
+            throw new Error(data.error || 'No route found by easyroutes.py');
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      updateBackendStatus(false, lastError ? lastError.message : 'Backend unreachable');
+      throw lastError || new Error('Failed to reach easyroutes.py backend server');
     }
 
     // --- 4. MAP RENDERING ---
@@ -478,8 +554,6 @@
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('cx', x);
         text.setAttribute('cy', y + 5);
-        text.setAttribute('x', x);
-        text.setAttribute('y', y + 5);
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('fill', '#1e293b');
         text.setAttribute('font-size', '12.5');
@@ -545,7 +619,7 @@
       document.getElementById('goalSelect').value = selectedGoal || '';
     }
 
-    function recalculateRoute() {
+    async function recalculateRoute() {
       // Clear previous active route graphics
       activeRouteGroup.innerHTML = '';
       routeGlowGroup.innerHTML = '';
@@ -564,8 +638,14 @@
 
       const placeholder = document.getElementById('placeholderState');
       const routeDetails = document.getElementById('routeDetails');
+      const loadingState = document.getElementById('routeLoadingState');
+      const errorState = document.getElementById('backendErrorState');
+
+      // Hide error state initially
+      errorState.classList.add('hidden');
 
       if (!selectedStart || !selectedGoal) {
+        loadingState.classList.add('hidden');
         placeholder.classList.remove('hidden');
         routeDetails.classList.add('hidden');
 
@@ -584,122 +664,144 @@
         return;
       }
 
-      // Compute A* route
-      const result = runAStar(selectedStart, selectedGoal);
-      if (!result) return;
-
+      // Show loading indicator while communicating with easyroutes.py
       placeholder.classList.add('hidden');
-      routeDetails.classList.remove('hidden');
+      routeDetails.classList.add('hidden');
+      loadingState.classList.remove('hidden');
 
-      const { path, distance } = result;
+      try {
+        // STRICTLY fetch route from easyroutes.py Python backend
+        const result = await fetchRouteFromBackend(selectedStart, selectedGoal);
+        loadingState.classList.add('hidden');
 
-      // Update Info Cards
-      document.getElementById('totalDistance').textContent = distance >= 1000 
-        ? `${(distance / 1000).toFixed(2)} km` 
-        : `${distance} meters`;
+        if (!result) return;
 
-      // Average walking speed ~ 1.3 m/s = 78 m/min
-      const walkingMins = Math.max(1, Math.round(distance / 78));
-      document.getElementById('walkDuration').textContent = `• ~${walkingMins} min walk`;
+        routeDetails.classList.remove('hidden');
 
-      // Render Step Directions
-      const stepsList = document.getElementById('stepsList');
-      stepsList.innerHTML = '';
+        const { path, distance, segments } = result;
 
-      path.forEach((nodeId, idx) => {
-        const node = NODES[nodeId];
-        const stepDiv = document.createElement('div');
-        stepDiv.className = 'relative flex items-start space-x-2.5 text-xs';
+        // Update Info Cards
+        document.getElementById('totalDistance').textContent = distance >= 1000 
+          ? `${(distance / 1000).toFixed(2)} km` 
+          : `${distance} meters`;
 
-        let distInfo = '';
-        if (idx < path.length - 1) {
-          const nextNode = path[idx + 1];
-          const segmentDist = GRAPH[nodeId][nextNode];
-          distInfo = `<span class="text-blue-600 font-bold ml-auto">${segmentDist}m</span>`;
-        }
+        // Average walking speed ~ 1.3 m/s = 78 m/min
+        const walkingMins = Math.max(1, Math.round(distance / 78));
+        document.getElementById('walkDuration').textContent = `• ~${walkingMins} min walk`;
 
-        const isFirst = idx === 0;
-        const isLast = idx === path.length - 1;
-        const badgeColor = isFirst ? 'bg-emerald-500' : isLast ? 'bg-rose-500' : 'bg-blue-500';
+        // Render Step Directions
+        const stepsList = document.getElementById('stepsList');
+        stepsList.innerHTML = '';
 
-        stepDiv.innerHTML = `
-          <span class="w-3.5 h-3.5 rounded-full ${badgeColor} text-white font-bold flex items-center justify-center text-[9px] mt-0.5 shadow-sm">
-            ${isFirst ? 'S' : isLast ? 'G' : idx}
-          </span>
-          <div class="flex-1 flex items-center justify-between">
-            <div>
-              <p class="font-bold text-slate-800">${node.name}</p>
-              <p class="text-[11px] text-slate-400">${isFirst ? 'Starting point' : isLast ? 'Destination arrived' : `Continue towards ${NODES[path[idx+1]].short}`}</p>
+        path.forEach((nodeId, idx) => {
+          const node = NODES[nodeId];
+          const stepDiv = document.createElement('div');
+          stepDiv.className = 'relative flex items-start space-x-2.5 text-xs';
+
+          let distInfo = '';
+          if (idx < path.length - 1) {
+            const nextNode = path[idx + 1];
+            let segmentDist = null;
+            if (segments && segments[idx]) {
+              segmentDist = segments[idx].distance;
+            } else if (GRAPH[nodeId] && GRAPH[nodeId][nextNode]) {
+              segmentDist = GRAPH[nodeId][nextNode];
+            }
+            if (segmentDist != null) {
+              distInfo = `<span class="text-blue-600 font-bold ml-auto">${segmentDist}m</span>`;
+            }
+          }
+
+          const isFirst = idx === 0;
+          const isLast = idx === path.length - 1;
+          const badgeColor = isFirst ? 'bg-emerald-500' : isLast ? 'bg-rose-500' : 'bg-blue-500';
+
+          stepDiv.innerHTML = `
+            <span class="w-3.5 h-3.5 rounded-full ${badgeColor} text-white font-bold flex items-center justify-center text-[9px] mt-0.5 shadow-sm">
+              ${isFirst ? 'S' : isLast ? 'G' : idx}
+            </span>
+            <div class="flex-1 flex items-center justify-between">
+              <div>
+                <p class="font-bold text-slate-800">${node ? node.name : nodeId}</p>
+                <p class="text-[11px] text-slate-400">${isFirst ? 'Starting point' : isLast ? 'Destination reached' : `Continue towards ${NODES[path[idx+1]] ? NODES[path[idx+1]].short : path[idx+1]}`}</p>
+              </div>
+              ${distInfo}
             </div>
-            ${distInfo}
-          </div>
-        `;
-        stepsList.appendChild(stepDiv);
-      });
+          `;
+          stepsList.appendChild(stepDiv);
+        });
 
-      // Draw SVG Polyline for Route
-      const points = path.map(id => {
-        const { x, y } = toSvg(NODES[id].x, NODES[id].y);
-        return `${x},${y}`;
-      }).join(' ');
+        // Draw SVG Polyline for Route
+        const points = path.map(id => {
+          const { x, y } = toSvg(NODES[id].x, NODES[id].y);
+          return `${x},${y}`;
+        }).join(' ');
 
-      // Glowing underlay
-      const glowPolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      glowPolyline.setAttribute('points', points);
-      glowPolyline.setAttribute('fill', 'none');
-      glowPolyline.setAttribute('stroke', '#1a73e8');
-      glowPolyline.setAttribute('stroke-width', '16');
-      glowPolyline.setAttribute('stroke-linecap', 'round');
-      glowPolyline.setAttribute('stroke-linejoin', 'round');
-      glowPolyline.setAttribute('opacity', '0.35');
-      glowPolyline.setAttribute('filter', 'url(#routeGlow)');
-      routeGlowGroup.appendChild(glowPolyline);
+        // Glowing underlay
+        const glowPolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        glowPolyline.setAttribute('points', points);
+        glowPolyline.setAttribute('fill', 'none');
+        glowPolyline.setAttribute('stroke', '#1a73e8');
+        glowPolyline.setAttribute('stroke-width', '16');
+        glowPolyline.setAttribute('stroke-linecap', 'round');
+        glowPolyline.setAttribute('stroke-linejoin', 'round');
+        glowPolyline.setAttribute('opacity', '0.35');
+        glowPolyline.setAttribute('filter', 'url(#routeGlow)');
+        routeGlowGroup.appendChild(glowPolyline);
 
-      // Main active vibrant blue route
-      const activePolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      activePolyline.setAttribute('points', points);
-      activePolyline.setAttribute('fill', 'none');
-      activePolyline.setAttribute('stroke', '#1a73e8');
-      activePolyline.setAttribute('stroke-width', '7');
-      activePolyline.setAttribute('stroke-linecap', 'round');
-      activePolyline.setAttribute('stroke-linejoin', 'round');
-      activeRouteGroup.appendChild(activePolyline);
+        // Main active vibrant blue route
+        const activePolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        activePolyline.setAttribute('points', points);
+        activePolyline.setAttribute('fill', 'none');
+        activePolyline.setAttribute('stroke', '#1a73e8');
+        activePolyline.setAttribute('stroke-width', '7');
+        activePolyline.setAttribute('stroke-linecap', 'round');
+        activePolyline.setAttribute('stroke-linejoin', 'round');
+        activeRouteGroup.appendChild(activePolyline);
 
-      // Animated marching dash layer
-      const dashPolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      dashPolyline.setAttribute('class', 'animate-route');
-      dashPolyline.setAttribute('points', points);
-      dashPolyline.setAttribute('fill', 'none');
-      dashPolyline.setAttribute('stroke', '#ffffff');
-      dashPolyline.setAttribute('stroke-width', '3');
-      dashPolyline.setAttribute('stroke-linecap', 'round');
-      dashPolyline.setAttribute('stroke-linejoin', 'round');
-      activeRouteGroup.appendChild(dashPolyline);
+        // Animated marching dash layer
+        const dashPolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        dashPolyline.setAttribute('class', 'animate-route');
+        dashPolyline.setAttribute('points', points);
+        dashPolyline.setAttribute('fill', 'none');
+        dashPolyline.setAttribute('stroke', '#ffffff');
+        dashPolyline.setAttribute('stroke-width', '3');
+        dashPolyline.setAttribute('stroke-linecap', 'round');
+        dashPolyline.setAttribute('stroke-linejoin', 'round');
+        activeRouteGroup.appendChild(dashPolyline);
 
-      // Highlight path nodes on map
-      path.forEach((id, idx) => {
-        const elem = document.getElementById(`node-elem-${id}`);
-        if (!elem) return;
-        const circle = elem.querySelector('circle.base-circle');
-        if (idx === 0) {
-          circle.setAttribute('fill', '#10b981');
-          circle.setAttribute('stroke', '#ffffff');
-          circle.setAttribute('stroke-width', '4');
-          circle.setAttribute('r', '21');
-          circle.classList.add('pulse-start');
-        } else if (idx === path.length - 1) {
-          circle.setAttribute('fill', '#f43f5e');
-          circle.setAttribute('stroke', '#ffffff');
-          circle.setAttribute('stroke-width', '4');
-          circle.setAttribute('r', '21');
-          circle.classList.add('pulse-goal');
-        } else {
-          circle.setAttribute('fill', '#1a73e8');
-          circle.setAttribute('stroke', '#ffffff');
-          circle.setAttribute('stroke-width', '3');
-          circle.setAttribute('r', '18');
+        // Highlight path nodes on map
+        path.forEach((id, idx) => {
+          const elem = document.getElementById(`node-elem-${id}`);
+          if (!elem) return;
+          const circle = elem.querySelector('circle.base-circle');
+          if (idx === 0) {
+            circle.setAttribute('fill', '#10b981');
+            circle.setAttribute('stroke', '#ffffff');
+            circle.setAttribute('stroke-width', '4');
+            circle.setAttribute('r', '21');
+            circle.classList.add('pulse-start');
+          } else if (idx === path.length - 1) {
+            circle.setAttribute('fill', '#f43f5e');
+            circle.setAttribute('stroke', '#ffffff');
+            circle.setAttribute('stroke-width', '4');
+            circle.setAttribute('r', '21');
+            circle.classList.add('pulse-goal');
+          } else {
+            circle.setAttribute('fill', '#1a73e8');
+            circle.setAttribute('stroke', '#ffffff');
+            circle.setAttribute('stroke-width', '3');
+            circle.setAttribute('r', '18');
+          }
+        });
+      } catch (err) {
+        loadingState.classList.add('hidden');
+        errorState.classList.remove('hidden');
+        const errorMsg = document.getElementById('backendErrorMessage');
+        if (errorMsg) {
+          errorMsg.textContent = err.message || 'Unable to connect to Python easyroutes.py backend.';
         }
-      });
+      }
     }
 
     // --- 6. INITIALIZE UI & EVENT LISTENERS ---
@@ -707,7 +809,7 @@
       const startSelect = document.getElementById('startSelect');
       const goalSelect = document.getElementById('goalSelect');
 
-      // Populate dropdowns sorted by name
+      // Populate dropdowns sorted by key
       Object.values(NODES).forEach(node => {
         const opt1 = document.createElement('option');
         opt1.value = node.id;
@@ -746,6 +848,11 @@
           syncInputs();
           recalculateRoute();
         });
+      });
+
+      // Retry button on error banner
+      document.getElementById('retryBackendBtn').addEventListener('click', () => {
+        checkBackendHealth().then(() => recalculateRoute());
       });
 
       // Toggle Distance Labels
@@ -803,11 +910,13 @@
       // Render initial map
       renderStaticMap();
 
-      // Default demo route: Main Gate (K) -> Central Library (C)
-      selectedStart = 'K';
-      selectedGoal = 'C';
-      syncInputs();
-      recalculateRoute();
+      // Check backend health and run initial route via easyroutes.py backend
+      checkBackendHealth().then(() => {
+        selectedStart = 'K';
+        selectedGoal = 'C';
+        syncInputs();
+        recalculateRoute();
+      });
     }
 
     init();
